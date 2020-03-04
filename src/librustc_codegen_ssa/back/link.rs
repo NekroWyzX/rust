@@ -490,8 +490,8 @@ fn link_natively<'a, B: ArchiveBuilder<'a>>(
     info!("preparing {:?} to {:?}", crate_type, out_filename);
     let (linker, flavor) = linker_and_flavor(sess);
 
-    let any_dynamic_crate =
-        codegen_results.crate_info.dependency_formats.iter().any(|(ty, list)| {
+    let any_dynamic_crate = crate_type == config::CrateType::Dylib
+        || codegen_results.crate_info.dependency_formats.iter().any(|(ty, list)| {
             *ty == crate_type && list.iter().any(|&linkage| linkage == Linkage::Dynamic)
         });
 

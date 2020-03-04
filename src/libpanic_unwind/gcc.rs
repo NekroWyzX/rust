@@ -324,7 +324,7 @@ unsafe fn find_eh_action(
 // See docs in the `unwind` module. This needs to be implemented in assembly
 // because _Unwind_Resume expects to be called directly from the landing pad.
 // This means that we need to force a tail call here.
-#[cfg(all(
+/*#[cfg(all(
     not(bootstrap),
     target_os = "windows",
     any(target_arch = "x86", target_arch = "x86_64"),
@@ -343,7 +343,7 @@ _rust_eh_unwind_resume:
     jmp __Unwind_Resume
     .cfi_endproc
     "#
-}
+}*/
 #[cfg(all(
     bootstrap,
     target_os = "windows",
