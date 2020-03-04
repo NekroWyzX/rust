@@ -297,9 +297,12 @@ pub unsafe fn r#try<R, F: FnOnce() -> R>(f: F) -> Result<R, Box<dyn Any + Send>>
             let payload_ptr = payload.as_mut_ptr() as *mut u8;
             let r = intrinsics::r#try(try_fn, data, payload_ptr);
             if r != 0 {
-                if cfg!(target_env = "msvc") {
+                #[cfg(target_env = "msvc")]
+                {
                     catch_fn(data, payload_ptr)
-                } else {
+                }
+                #[cfg(not(target_env = "msvc"))]
+                {
                     catch_fn(data, payload.assume_init())
                 }
             }
