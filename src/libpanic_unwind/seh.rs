@@ -49,7 +49,7 @@
 
 use alloc::boxed::Box;
 use core::any::Any;
-use core::mem;
+use core::mem::{self, ManuallyDrop};
 use libc::{c_int, c_uint, c_void};
 
 struct Exception {
@@ -264,7 +264,11 @@ pub unsafe fn panic(data: Box<dyn Any + Send>) -> u32 {
     // _CxxThrowException executes entirely on this stack frame, so there's no
     // need to otherwise transfer `data` to the heap. We just pass a stack
     // pointer to this function.
-    let mut exception = Exception { data: Some(data) };
+    //
+    // The ManuallyDrop is needed here since we don't want Exception to be
+    // dropped when unwinding. Instead it will be dropped by exception_cleanup
+    // which is invoked by the C++ runtime.
+    let mut exception = ManuallyDrop::new(Exception { data: Some(data) });
     let throw_ptr = &mut exception as *mut _ as *mut _;
 
     // This... may seems surprising, and justifiably so. On 32-bit MSVC the
