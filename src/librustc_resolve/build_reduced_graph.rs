@@ -303,7 +303,7 @@ impl<'a, 'b> BuildReducedGraphVisitor<'a, 'b> {
     fn block_needs_anonymous_module(&mut self, block: &Block) -> bool {
         // If any statements are items, we need to create an anonymous module
         block.stmts.iter().any(|statement| match statement.kind {
-            StmtKind::Item(_) | StmtKind::Mac(_) => true,
+            StmtKind::Item(_) | StmtKind::MacCall(_) => true,
             _ => false,
         })
     }
@@ -816,7 +816,7 @@ impl<'a, 'b> BuildReducedGraphVisitor<'a, 'b> {
             // These items do not add names to modules.
             ItemKind::Impl { .. } | ItemKind::ForeignMod(..) | ItemKind::GlobalAsm(..) => {}
 
-            ItemKind::MacroDef(..) | ItemKind::Mac(_) => unreachable!(),
+            ItemKind::MacroDef(..) | ItemKind::MacCall(_) => unreachable!(),
         }
     }
 
@@ -832,7 +832,7 @@ impl<'a, 'b> BuildReducedGraphVisitor<'a, 'b> {
             ForeignItemKind::TyAlias(..) => {
                 (Res::Def(DefKind::ForeignTy, self.r.definitions.local_def_id(item.id)), TypeNS)
             }
-            ForeignItemKind::Macro(_) => unreachable!(),
+            ForeignItemKind::MacCall(_) => unreachable!(),
         };
         let parent = self.parent_scope.module;
         let expansion = self.parent_scope.expansion;
@@ -887,7 +887,7 @@ impl<'a, 'b> BuildReducedGraphVisitor<'a, 'b> {
             | Res::PrimTy(..)
             | Res::ToolMod => self.r.define(parent, ident, TypeNS, (res, vis, span, expansion)),
             Res::Def(DefKind::Fn, _)
-            | Res::Def(DefKind::Method, _)
+            | Res::Def(DefKind::AssocFn, _)
             | Res::Def(DefKind::Static, _)
             | Res::Def(DefKind::Const, _)
             | Res::Def(DefKind::AssocConst, _)
@@ -911,7 +911,7 @@ impl<'a, 'b> BuildReducedGraphVisitor<'a, 'b> {
                 let field_names = cstore.struct_field_names_untracked(def_id, self.r.session);
                 self.insert_field_names(def_id, field_names);
             }
-            Res::Def(DefKind::Method, def_id) => {
+            Res::Def(DefKind::AssocFn, def_id) => {
                 if cstore.associated_item_cloned_untracked(def_id).method_has_self_argument {
                     self.r.has_self.insert(def_id);
                 }
@@ -1180,9 +1180,9 @@ macro_rules! method {
 }
 
 impl<'a, 'b> Visitor<'b> for BuildReducedGraphVisitor<'a, 'b> {
-    method!(visit_expr: ast::Expr, ast::ExprKind::Mac, walk_expr);
-    method!(visit_pat: ast::Pat, ast::PatKind::Mac, walk_pat);
-    method!(visit_ty: ast::Ty, ast::TyKind::Mac, walk_ty);
+    method!(visit_expr: ast::Expr, ast::ExprKind::MacCall, walk_expr);
+    method!(visit_pat: ast::Pat, ast::PatKind::MacCall, walk_pat);
+    method!(visit_ty: ast::Ty, ast::TyKind::MacCall, walk_ty);
 
     fn visit_item(&mut self, item: &'b Item) {
         let macro_use = match item.kind {
@@ -1190,7 +1190,7 @@ impl<'a, 'b> Visitor<'b> for BuildReducedGraphVisitor<'a, 'b> {
                 self.parent_scope.legacy = self.define_macro(item);
                 return;
             }
-            ItemKind::Mac(..) => {
+            ItemKind::MacCall(..) => {
                 self.parent_scope.legacy = self.visit_invoc(item.id);
                 return;
             }
@@ -1208,7 +1208,7 @@ impl<'a, 'b> Visitor<'b> for BuildReducedGraphVisitor<'a, 'b> {
     }
 
     fn visit_stmt(&mut self, stmt: &'b ast::Stmt) {
-        if let ast::StmtKind::Mac(..) = stmt.kind {
+        if let ast::StmtKind::MacCall(..) = stmt.kind {
             self.parent_scope.legacy = self.visit_invoc(stmt.id);
         } else {
             visit::walk_stmt(self, stmt);
@@ -1216,7 +1216,7 @@ impl<'a, 'b> Visitor<'b> for BuildReducedGraphVisitor<'a, 'b> {
     }
 
     fn visit_foreign_item(&mut self, foreign_item: &'b ForeignItem) {
-        if let ForeignItemKind::Macro(_) = foreign_item.kind {
+        if let ForeignItemKind::MacCall(_) = foreign_item.kind {
             self.visit_invoc(foreign_item.id);
             return;
         }
@@ -1237,7 +1237,7 @@ impl<'a, 'b> Visitor<'b> for BuildReducedGraphVisitor<'a, 'b> {
     fn visit_assoc_item(&mut self, item: &'b AssocItem, ctxt: AssocCtxt) {
         let parent = self.parent_scope.module;
 
-        if let AssocItemKind::Macro(_) = item.kind {
+        if let AssocItemKind::MacCall(_) = item.kind {
             self.visit_invoc(item.id);
             return;
         }
@@ -1257,10 +1257,10 @@ impl<'a, 'b> Visitor<'b> for BuildReducedGraphVisitor<'a, 'b> {
                 if sig.decl.has_self() {
                     self.r.has_self.insert(item_def_id);
                 }
-                (Res::Def(DefKind::Method, item_def_id), ValueNS)
+                (Res::Def(DefKind::AssocFn, item_def_id), ValueNS)
             }
             AssocItemKind::TyAlias(..) => (Res::Def(DefKind::AssocTy, item_def_id), TypeNS),
-            AssocItemKind::Macro(_) => bug!(), // handled above
+            AssocItemKind::MacCall(_) => bug!(), // handled above
         };
 
         let vis = ty::Visibility::Public;
@@ -1273,7 +1273,7 @@ impl<'a, 'b> Visitor<'b> for BuildReducedGraphVisitor<'a, 'b> {
     fn visit_token(&mut self, t: Token) {
         if let token::Interpolated(nt) = t.kind {
             if let token::NtExpr(ref expr) = *nt {
-                if let ast::ExprKind::Mac(..) = expr.kind {
+                if let ast::ExprKind::MacCall(..) = expr.kind {
                     self.visit_invoc(expr.id);
                 }
             }

@@ -175,7 +175,7 @@ impl<'l, 'tcx> SaveContext<'l, 'tcx> {
             }
             // FIXME(plietar): needs a new DefKind in rls-data
             ast::ForeignItemKind::TyAlias(..) => None,
-            ast::ForeignItemKind::Macro(..) => None,
+            ast::ForeignItemKind::MacCall(..) => None,
         }
     }
 
@@ -716,7 +716,7 @@ impl<'l, 'tcx> SaveContext<'l, 'tcx> {
             | Res::Def(HirDefKind::Ctor(..), _) => {
                 Some(Ref { kind: RefKind::Variable, span, ref_id: id_from_def_id(res.def_id()) })
             }
-            Res::Def(HirDefKind::Method, decl_id) => {
+            Res::Def(HirDefKind::AssocFn, decl_id) => {
                 let def_id = if decl_id.is_local() {
                     let ti = self.tcx.associated_item(decl_id);
 

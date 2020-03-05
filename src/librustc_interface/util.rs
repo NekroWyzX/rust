@@ -426,7 +426,7 @@ pub(crate) fn check_attr_crate_type(attrs: &[ast::Attribute], lint_buffer: &mut 
     for a in attrs.iter() {
         if a.check_name(sym::crate_type) {
             if let Some(n) = a.value_str() {
-                if let Some(_) = categorize_crate_type(n) {
+                if categorize_crate_type(n).is_some() {
                     return;
                 }
 
@@ -780,7 +780,7 @@ impl<'a> MutVisitor for ReplaceBodyWithLoop<'a, '_> {
 
     // in general the pretty printer processes unexpanded code, so
     // we override the default `visit_mac` method which panics.
-    fn visit_mac(&mut self, mac: &mut ast::Mac) {
+    fn visit_mac(&mut self, mac: &mut ast::MacCall) {
         noop_visit_mac(mac, self)
     }
 }
